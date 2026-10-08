@@ -1,0 +1,24 @@
+{
+  "name": "doujin-viewer",
+  "version": "1.0.0",
+  "description": "동인지 뷰어",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "build": {
+    "appId": "com.doujin.viewer",
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "keywords": [],
+  "author": "me",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^41.0.2",
+    "electron-builder": "latest"
+  }
+}

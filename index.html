@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>동인지 뷰어</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a1a; color: #fff; font-family: sans-serif; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+    #toolbar { background: #111; padding: 8px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #333; flex-shrink: 0; }
+    button { background: #333; color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #555; }
+    button.active { background: #7eb8f7; color: #000; }
+    #page-info { min-width: 80px; text-align: center; }
+    #current-title { flex: 1; font-size: 13px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .screen { flex: 1; overflow: hidden; display: none; }
+    .screen.active { display: flex; flex-direction: column; }
+    #library-screen { overflow-y: auto; padding: 16px; }
+    #thumbnail-grid { display: grid; gap: 8px; grid-template-columns: repeat(6, 1fr); }
+    #thumbnail-grid.size-large  { grid-template-columns: repeat(4, 1fr); }
+    #thumbnail-grid.size-medium { grid-template-columns: repeat(5, 1fr); }
+    #thumbnail-grid.size-small  { grid-template-columns: repeat(6, 1fr); }
+    .thumb-card { background: #222; border-radius: 8px; overflow: hidden; cursor: pointer; transition: transform 0.15s; }
+    .thumb-card:hover { transform: scale(1.03); }
+    .thumb-card img { width: 100%; aspect-ratio: 3/4; object-fit: cover; display: block; background: #333; }
+    .thumb-card .thumb-info { padding: 6px; }
+    .thumb-card .thumb-title { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .thumb-card .thumb-count { font-size: 10px; color: #888; margin-top: 2px; }
+    .thumb-no-image { width: 100%; aspect-ratio: 3/4; background: #333; display: flex; align-items: center; justify-content: center; font-size: 40px; }
+    #viewer-screen { overflow: hidden; }
+    #viewer { flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    #viewer img { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; object-fit: contain; }
+    .library-only { display: none; }
+    .viewer-only { display: none; }
+    #context-menu { position: fixed; background: #2a2a2a; border: 1px solid #444; border-radius: 6px; padding: 4px 0; z-index: 9999; display: none; min-width: 160px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+    #context-menu .menu-item { padding: 8px 16px; cursor: pointer; font-size: 13px; }
+    #context-menu .menu-item:hover { background: #3a3a3a; }
+    #context-menu .menu-item.danger { color: #ff6b6b; }
+    .thumb-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+    .tag { background: #3a3a5a; color: #9ab; font-size: 9px; padding: 1px 5px; border-radius: 3px; }
+    .tag-block { background: #2a2a2a; color: #888; font-size: 13px; padding: 6px 12px; border-radius: 6px; cursor: pointer; border: 1px solid #444; transition: all 0.15s; user-select: none; }
+    .tag-block:hover { border-color: #666; color: #ccc; }
+    .tag-block.selected { background: #2a4a7a; color: #7eb8f7; border-color: #7eb8f7; }
+    .tag-manage-item { display: inline-flex; align-items: center; gap: 6px; background: #2a2a2a; border: 1px solid #444; border-radius: 6px; padding: 6px 10px; font-size: 13px; color: #ccc; cursor: default; }
+    .tag-manage-item:hover { border-color: #666; }
+    .tag-manage-item .tag-remove { cursor: pointer; color: #666; font-size: 15px; line-height: 1; }
+    .tag-manage-item .tag-remove:hover { color: #ff6b6b; }
+    #page-preview::-webkit-scrollbar { height: 4px; }
+    #page-preview::-webkit-scrollbar-track { background: #222; }
+    #page-preview::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
+    .preview-item { flex-shrink: 0; cursor: pointer; border: 2px solid transparent; border-radius: 4px; overflow: hidden; height: 70px; width: 50px; background: #333; }
+    .preview-item:hover { border-color: #888; }
+    .preview-item.active { border-color: #7eb8f7; }
+    .preview-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .sort-item { padding: 8px 16px; cursor: pointer; font-size: 13px; color: #ccc; }
+    .sort-item:hover { background: #3a3a3a; }
+    .sort-item.active { color: #7eb8f7; }
+    #recommend-grid { display: grid; gap: 8px; }
+    #recommend-grid.size-large  { grid-template-columns: repeat(4, 1fr); }
+    #recommend-grid.size-medium { grid-template-columns: repeat(5, 1fr); }
+    #recommend-grid.size-small  { grid-template-columns: repeat(6, 1fr); }
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 99999; display: none; align-items: center; justify-content: center; }
+    .modal-box { background: #2a2a2a; border-radius: 8px; padding: 24px; width: 480px; max-height: 80vh; display: flex; flex-direction: column; gap: 12px; }
+    .modal-title { font-size: 15px; font-weight: bold; }
+    .modal-subtitle { font-size: 12px; color: #888; }
+    .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+    #btn-close { margin-left: auto; background: #3a1a1a; color: #ff6b6b; }
+    #btn-close:hover { background: #ff6b6b; color: #fff; }
+    #video-viewer-screen { overflow: hidden; background: #000; }
+    #video-container { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    #video-container video { max-width: 100%; max-height: 100%; }
+    #video-controls { background: #111; padding: 8px 16px; display: flex; align-items: center; gap: 12px; border-top: 1px solid #333; flex-shrink: 0; }
+    #video-seekbar { flex: 1; accent-color: #7eb8f7; cursor: pointer; }
+    #video-volume { width: 80px; accent-color: #7eb8f7; cursor: pointer; }
+    #video-time { font-size: 12px; color: #aaa; min-width: 100px; text-align: center; }
+    #episode-list { background: #111; border-right: 1px solid #333; width: 200px; overflow-y: auto; flex-shrink: 0; display: flex; flex-direction: column; }
+    .episode-item { padding: 10px 14px; cursor: pointer; font-size: 13px; color: #ccc; border-bottom: 1px solid #222; }
+    .episode-item:hover { background: #2a2a2a; }
+    .episode-item.active { color: #7eb8f7; background: #1a2a3a; }
+  </style>
+</head>
+<body>
+
+  <div id="toolbar">
+    <button id="btn-open" class="library-only">📂 폴더 열기</button>
+    <button id="btn-library-back" class="library-only" style="display:none;">← 상위 폴더</button>
+    <div class="library-only" style="display:none; position:relative; gap:4px;">
+      <button id="btn-sort">추가됨 ▼</button>
+      <div id="sort-menu" style="display:none; position:absolute; top:100%; left:0;
+        background:#2a2a2a; border:1px solid #444; border-radius:6px; padding:4px 0;
+        min-width:120px; z-index:9999; margin-top:4px;">
+        <div class="sort-item active" data-sort="date">추가됨</div>
+        <div class="sort-item" data-sort="views">조회수</div>
+      </div>
+      <button id="btn-order">내림차순 ↓</button>
+    </div>
+    <button id="btn-tag-manage" class="library-only" style="display:none;">🏷️ 태그 관리</button>
+    <input id="tag-search" class="library-only" type="text" placeholder="🔍 태그 검색..."
+      style="display:none; background:#333; border:none; color:#fff; padding:6px 12px;
+      border-radius:4px; font-size:13px; width:200px; outline:none;">
+    <button id="btn-back" class="viewer-only">← 목록으로</button>
+    <button id="btn-prev" class="viewer-only">◀ 이전</button>
+    <span id="page-info" class="viewer-only">-</span>
+    <button id="btn-next" class="viewer-only">다음 ▶</button>
+    <span id="current-title" class="viewer-only">-</span>
+    <button id="btn-fullscreen" class="viewer-only">⛶ 전체화면</button>
+    <!-- 닫기 버튼 (항상 표시) -->
+    <button id="btn-close" title="앱 종료">✕ 종료</button>
+  </div>
+
+  <div id="library-screen" class="screen active">
+    <p id="empty-msg" style="color:#555; margin: 40vh auto;">
+      📂 폴더 열기 버튼으로 라이브러리를 선택하세요
+    </p>
+    <div id="recommend-section" style="display:none; background:#1e2a1e; padding:12px 16px; margin-bottom:8px;">
+      <div style="font-size:13px; color:#8bc88b; margin-bottom:10px;">💡 추천 작품 (3일 이상 미열람 또는 태그 없는 작품)</div>
+      <div id="recommend-grid" class="size-small"></div>
+    </div>
+    <div style="padding: 8px 16px 0 16px; font-size:13px; color:#888; margin-bottom:6px;" id="total-label"></div>
+    <div id="thumbnail-grid" class="size-medium" style="padding: 0 16px;"></div>
+  </div>
+
+  <div id="viewer-screen" class="screen">
+    <div id="page-preview" style="display:flex; gap:6px; padding:8px; background:#111; overflow-x:auto; flex-shrink:0; border-bottom:1px solid #333; height:90px;"></div>
+    <div id="viewer"></div>
+  </div>
+
+  <div id="context-menu">
+    <div class="menu-item" id="menu-move">📁 다른 폴더로 이동</div>
+    <div class="menu-item" id="menu-tag">🏷️ 태그 편집</div>
+    <div class="menu-item danger" id="menu-delete">🗑️ 휴지통으로 삭제</div>
+  </div>
+
+  <!-- 작품 태그 편집 모달 -->
+  <div id="tag-modal" class="modal-overlay">
+    <div class="modal-box" style="width: 520px;">
+      <div class="modal-title">🏷️ 태그 편집</div>
+      <div id="tag-modal-name" class="modal-subtitle"></div>
+      <div id="tag-block-list" style="display:flex; flex-wrap:wrap; gap:8px; background:#1a1a1a; padding:12px; border-radius:6px; min-height:60px; max-height:300px; overflow-y:auto;">
+        <div style="color:#555; font-size:13px;" id="tag-block-empty">태그 없음 — 태그 관리에서 태그를 추가하세요</div>
+      </div>
+      <div class="modal-footer">
+        <button id="tag-cancel">취소</button>
+        <button id="tag-save" style="background:#7eb8f7; color:#000;">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 태그 관리 모달 -->
+  <div id="tag-manage-modal" class="modal-overlay">
+    <div class="modal-box" style="width: 680px; max-height: 85vh;">
+      <div class="modal-title">🏷️ 태그 관리</div>
+      <input id="tag-manage-search" type="text" placeholder="🔍 태그 검색..."
+        style="background:#333; border:none; color:#fff; padding:8px 12px; border-radius:4px; font-size:13px; outline:none; width:100%;">
+      <div id="tag-manage-list" style="display:flex; flex-wrap:wrap; gap:8px; background:#1a1a1a; padding:12px; border-radius:6px; overflow-y:auto; max-height:55vh;"></div>
+      <div style="display:flex; gap:8px;">
+        <input id="tag-manage-input" type="text" placeholder="새 태그 입력 후 추가"
+          style="flex:1; background:#333; border:none; color:#fff; padding:8px 12px; border-radius:4px; font-size:13px; outline:none;">
+        <button id="tag-manage-add" style="background:#7eb8f7; color:#000; white-space:nowrap;">+ 추가</button>
+      </div>
+      <div class="modal-footer">
+        <button id="tag-manage-close" style="background:#7eb8f7; color:#000;">완료</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="video-viewer-screen" class="screen">
+    <div style="display:flex; flex: 1; overflow:hidden;">
+      <div id="episode-list"></div>
+      <div id="video-container">
+        <video id="main-video" controls></video>
+      </div>
+    </div>
+    <div id="video-controls">
+      <button id="btn-video-back">← 목록으로</button>
+      <button id="btn-video-play">⏸</button>
+      <input id="video-seekbar" type="range" value="0" min="0" step="0.1">
+      <span id="video-time">0:00 / 0:00</span>
+      <span style="font-size:12px; color:#aaa;">🔊</span>
+      <input id="video-volume" type="range" value="1" min="0" max="1" step="0.01">
+      <button id="btn-video-fullscreen">⛶ 전체화면</button>
+      <button id="btn-close-video" style="margin-left:auto; background:#3a1a1a; color:#ff6b6b;">✕ 종료</button>
+    </div>
+  </div>
+
+
+  <script src="renderer.js"></script>
+</body>
+</html>
